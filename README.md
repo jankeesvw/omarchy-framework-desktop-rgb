@@ -2,7 +2,7 @@
 
 A colour wheel in the Omarchy bar for the eight LEDs on the Framework Desktop fan. Pick a colour, set the brightness, or tick one box and let the LEDs follow the accent colour of your Omarchy theme.
 
-![Framework Desktop RGB](preview.png)
+![Framework Desktop RGB](preview.webp)
 
 ## What it does
 
