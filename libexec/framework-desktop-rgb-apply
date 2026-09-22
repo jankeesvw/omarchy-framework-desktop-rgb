@@ -1,0 +1,16 @@
+#!/usr/bin/bash
+# Runs as root, through sudo. Takes exactly one colour as RRGGBB and paints
+# the eight LEDs on the Framework Desktop fan with it, nothing else.
+#
+# This is the only thing the sudoers rule allows, so it trusts no argument:
+# anything that is not six hex digits is refused before framework_tool runs.
+set -euo pipefail
+PATH=/usr/bin:/bin
+
+if [ "$#" -ne 1 ] || [[ ! "$1" =~ ^[0-9A-Fa-f]{6}$ ]]; then
+  echo "usage: framework-desktop-rgb-apply RRGGBB" >&2
+  exit 2
+fi
+
+c="0x$1"
+exec /usr/bin/framework_tool --rgbkbd 0 "$c" "$c" "$c" "$c" "$c" "$c" "$c" "$c"

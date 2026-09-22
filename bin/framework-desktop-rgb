@@ -1,0 +1,85 @@
+#!/usr/bin/bash
+# Framework Desktop RGB: the panel's side of the LED control.
+#
+#   status        {"ok":true,"desktop":bool,"ready":bool}
+#   set RRGGBB    paint all eight fan LEDs, {"ok":true} or {"ok":false,"error":...}
+#   grant         one-time, interactive: install the root helper and its sudoers rule
+#   revoke        remove both again
+#
+# Writing to the EC needs root. Rather than opening /dev/cros_ec to the user,
+# which would hand over fan control, charge limits and firmware flashing too,
+# a root-owned helper that only accepts a colour is allowed through sudo, and
+# the sudoers rule itself only lets six hex digits through as its argument.
+set -uo pipefail
+export PATH=/usr/bin:/bin
+
+HELPER=/usr/local/libexec/framework-desktop-rgb-apply
+SUDOERS=/etc/sudoers.d/framework-desktop-rgb
+HERE="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
+
+fail() { /usr/bin/jq -cn --arg e "$1" '{ok:false,error:$e}'; exit 0; }
+
+is_desktop() {
+  local vendor product
+  vendor="$(/usr/bin/head -c 64 /sys/class/dmi/id/sys_vendor 2>/dev/null)"
+  product="$(/usr/bin/head -c 128 /sys/class/dmi/id/product_name 2>/dev/null)"
+  [[ "$vendor" == Framework* && "$product" == Desktop* ]]
+}
+
+is_ready() {
+  [ -x "$HELPER" ] && /usr/bin/timeout -k 2 5 /usr/bin/sudo -n -l "$HELPER" 000000 >/dev/null 2>&1
+}
+
+case "${1:-status}" in
+  status)
+    desktop=false; ready=false
+    is_desktop && desktop=true
+    is_ready && ready=true
+    printf '{"ok":true,"desktop":%s,"ready":%s}\n' "$desktop" "$ready"
+    ;;
+
+  set)
+    hex="${2:-}"
+    [[ "$hex" =~ ^[0-9A-Fa-f]{6}$ ]] || fail "expected a colour as RRGGBB"
+    is_ready || fail "needs the one-time setup"
+    # framework_tool can say anything on failure; keep the first few hundred
+    # bytes, capped where they are produced rather than after collecting.
+    err="$(/usr/bin/timeout -k 2 10 /usr/bin/sudo -n "$HELPER" "$hex" 2>&1 >/dev/null | /usr/bin/head -c 300)"
+    rc=$?
+    if [ "$rc" -eq 0 ]; then
+      printf '{"ok":true}\n'
+    else
+      fail "${err:-framework_tool failed}"
+    fi
+    ;;
+
+  grant)
+    user="$(id -un)"
+    [[ "$user" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]] || { echo "Unexpected user name: $user" >&2; exit 1; }
+    echo "Framework Desktop RGB needs root to talk to the embedded controller."
+    echo "This installs $HELPER, which only accepts a colour,"
+    echo "and a sudoers rule that lets $user run that one helper, with a colour"
+    echo "as its only argument, without a password."
+    echo
+    tmp="$(mktemp)"
+    trap 'rm -f -- "$tmp"' EXIT
+    printf '%s ALL=(root) NOPASSWD: %s ^[0-9A-Fa-f]{6}$\n' "$user" "$HELPER" > "$tmp"
+    if /usr/bin/sudo /usr/bin/install -D -o root -g root -m 0755 -- "$HERE/libexec/framework-desktop-rgb-apply" "$HELPER" \
+       && /usr/bin/sudo /usr/bin/visudo -cqf "$tmp" \
+       && /usr/bin/sudo /usr/bin/install -o root -g root -m 0440 -- "$tmp" "$SUDOERS"; then
+      echo; echo "Done. You can close this window."
+    else
+      echo; echo "Setup failed, nothing is allowed yet."
+    fi
+    read -rsn1 -p "Press any key to close." || true
+    ;;
+
+  revoke)
+    /usr/bin/sudo /usr/bin/rm -f -- "$SUDOERS" "$HELPER" && echo "Removed."
+    ;;
+
+  *)
+    echo "usage: framework-desktop-rgb status|set RRGGBB|grant|revoke" >&2
+    exit 2
+    ;;
+esac

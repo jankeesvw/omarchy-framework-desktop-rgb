@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "id": "jankeesvw.framework-desktop-rgb",
+  "name": "Framework Desktop RGB",
+  "version": "1.0.0",
+  "author": "Jankees van Woezik",
+  "description": "Pick the colour of the Framework Desktop fan LEDs on a colour wheel, or keep them in sync with the Omarchy theme.",
+  "kinds": ["bar-widget"],
+  "entryPoints": { "barWidget": "Panel.qml" },
+  "barWidget": {
+    "displayName": "Framework Desktop RGB",
+    "description": "Colour wheel for the Framework Desktop fan LEDs, optionally following the Omarchy theme.",
+    "category": "System",
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "hue": 0.58,
+      "saturation": 1,
+      "brightness": 1,
+      "syncTheme": false
+    },
+    "schema": []
+  }
+}
