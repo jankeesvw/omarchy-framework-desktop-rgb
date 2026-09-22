@@ -1,15 +1,16 @@
 #!/usr/bin/bash
 # Framework Desktop RGB: the panel's side of the LED control.
 #
-#   status        {"ok":true,"desktop":bool,"ready":bool}
-#   set RRGGBB    paint all eight fan LEDs, {"ok":true} or {"ok":false,"error":...}
+#   status        {"ok":true,"desktop":bool,"ready":bool,"multi":bool}
+#   set LIST      paint the eight fan LEDs; LIST is one to eight colours as
+#                 RRGGBB, comma separated, repeating around the ring
 #   grant         one-time, interactive: install the root helper and its sudoers rule
 #   revoke        remove both again
 #
 # Writing to the EC needs root. Rather than opening /dev/cros_ec to the user,
 # which would hand over fan control, charge limits and firmware flashing too,
-# a root-owned helper that only accepts a colour is allowed through sudo, and
-# the sudoers rule itself only lets six hex digits through as its argument.
+# a root-owned helper that only accepts colours is allowed through sudo, and
+# the sudoers rule itself only lets that exact shape through as its argument.
 set -uo pipefail
 export PATH=/usr/bin:/bin
 
@@ -30,17 +31,29 @@ is_ready() {
   [ -x "$HELPER" ] && /usr/bin/timeout -k 2 5 /usr/bin/sudo -n -l "$HELPER" 000000 >/dev/null 2>&1
 }
 
+# An older setup allowed a single colour only. Ask sudo whether a list is
+# allowed too, so the panel can say the setup has to be run again rather than
+# failing on every write.
+is_multi() {
+  is_ready || return 1
+  # The installed helper is a copy, so an older one is still in place until the
+  # setup is run again. It refuses a list, and sudo may allow one anyway.
+  /usr/bin/grep -q 'RRGGBB\[,RRGGBB' -- "$HELPER" 2>/dev/null || return 1
+  /usr/bin/timeout -k 2 5 /usr/bin/sudo -n -l "$HELPER" 000000,111111 >/dev/null 2>&1
+}
+
 case "${1:-status}" in
   status)
-    desktop=false; ready=false
+    desktop=false; ready=false; multi=false
     is_desktop && desktop=true
     is_ready && ready=true
-    printf '{"ok":true,"desktop":%s,"ready":%s}\n' "$desktop" "$ready"
+    is_multi && multi=true
+    printf '{"ok":true,"desktop":%s,"ready":%s,"multi":%s}\n' "$desktop" "$ready" "$multi"
     ;;
 
   set)
     hex="${2:-}"
-    [[ "$hex" =~ ^[0-9A-Fa-f]{6}$ ]] || fail "expected a colour as RRGGBB"
+    [[ "$hex" =~ ^[0-9A-Fa-f]{6}(,[0-9A-Fa-f]{6}){0,7}$ ]] || fail "expected one to eight colours as RRGGBB, comma separated"
     is_ready || fail "needs the one-time setup"
     # framework_tool can say anything on failure; keep the first few hundred
     # bytes, capped where they are produced rather than after collecting.
@@ -58,12 +71,12 @@ case "${1:-status}" in
     [[ "$user" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]] || { echo "Unexpected user name: $user" >&2; exit 1; }
     echo "Framework Desktop RGB needs root to talk to the embedded controller."
     echo "This installs $HELPER, which only accepts a colour,"
-    echo "and a sudoers rule that lets $user run that one helper, with a colour"
-    echo "as its only argument, without a password."
+    echo "and a sudoers rule that lets $user run that one helper, with up to"
+    echo "eight comma separated colours as its only argument, without a password."
     echo
     tmp="$(mktemp)"
     trap 'rm -f -- "$tmp"' EXIT
-    printf '%s ALL=(root) NOPASSWD: %s ^[0-9A-Fa-f]{6}$\n' "$user" "$HELPER" > "$tmp"
+    printf '%s ALL=(root) NOPASSWD: %s ^[0-9A-Fa-f]{6}(,[0-9A-Fa-f]{6}){0,7}$\n' "$user" "$HELPER" > "$tmp"
     if /usr/bin/sudo /usr/bin/install -D -o root -g root -m 0755 -- "$HERE/libexec/framework-desktop-rgb-apply" "$HELPER" \
        && /usr/bin/sudo /usr/bin/visudo -cqf "$tmp" \
        && /usr/bin/sudo /usr/bin/install -o root -g root -m 0440 -- "$tmp" "$SUDOERS"; then

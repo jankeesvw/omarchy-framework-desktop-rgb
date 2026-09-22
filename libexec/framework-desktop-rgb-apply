@@ -1,16 +1,26 @@
 #!/usr/bin/bash
-# Runs as root, through sudo. Takes exactly one colour as RRGGBB and paints
-# the eight LEDs on the Framework Desktop fan with it, nothing else.
+# Runs as root, through sudo. Takes one argument: between one and eight
+# colours as RRGGBB, comma separated, and paints the eight LEDs on the
+# Framework Desktop fan with them. Fewer than eight colours repeat around
+# the ring. Nothing else.
 #
 # This is the only thing the sudoers rule allows, so it trusts no argument:
-# anything that is not six hex digits is refused before framework_tool runs.
+# anything that is not that exact shape is refused before framework_tool runs.
 set -euo pipefail
 PATH=/usr/bin:/bin
 
-if [ "$#" -ne 1 ] || [[ ! "$1" =~ ^[0-9A-Fa-f]{6}$ ]]; then
-  echo "usage: framework-desktop-rgb-apply RRGGBB" >&2
+LEDS=8
+
+if [ "$#" -ne 1 ] || [[ ! "$1" =~ ^[0-9A-Fa-f]{6}(,[0-9A-Fa-f]{6}){0,7}$ ]]; then
+  echo "usage: framework-desktop-rgb-apply RRGGBB[,RRGGBB...] (up to 8)" >&2
   exit 2
 fi
 
-c="0x$1"
-exec /usr/bin/framework_tool --rgbkbd 0 "$c" "$c" "$c" "$c" "$c" "$c" "$c" "$c"
+IFS=, read -r -a colours <<< "$1"
+
+args=()
+for ((i = 0; i < LEDS; i++)); do
+  args+=("0x${colours[i % ${#colours[@]}]}")
+done
+
+exec /usr/bin/framework_tool --rgbkbd 0 "${args[@]}"

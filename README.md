@@ -1,15 +1,19 @@
 # Framework Desktop RGB
 
-A colour wheel in the Omarchy bar for the eight LEDs on the Framework Desktop fan. Pick a colour, set the brightness, or tick one box and let the LEDs follow the accent colour of your Omarchy theme.
+A colour wheel in the Omarchy bar for the eight LEDs on the Framework Desktop fan. Pick a colour, set the brightness, give every LED its own colour, or tick one box and let the ring follow the accent colour of your Omarchy theme.
 
 ![Framework Desktop RGB](preview.webp)
 
 ## What it does
 
-- **Colour wheel.** The angle picks the hue, the distance from the centre the saturation.
-- **Brightness.** A slider below the wheel; all the way down turns the LEDs off.
-- **Keep in sync with theme.** Takes hue and saturation from the theme accent and follows every theme switch. Your brightness stays. Touching the wheel turns the sync off again.
-- **Keyboard.** Arrow keys move the colour (Shift for bigger steps), `+` and `-` change the brightness, space toggles the sync, Escape closes the panel.
+- **Colour wheel.** The angle picks the hue, the distance from the centre the saturation. Every LED has its own marker on the wheel.
+- **Brightness and off.** A slider below the wheel, with a power button beside it. Off is a state of its own, so switching back on returns to the brightness you had.
+- **Multiple colours.** Eight dots appear under the wheel, one per LED. Click one, or press `1` to `8`, and the wheel sets that LED's colour.
+- **Keep in sync with theme.** Takes the hue from the theme accent and follows every theme switch, with the saturation lifted so a pale theme still shows as a colour. With multiple colours on, the ring starts at the accent, drifts away around the fan and comes back to it.
+- **Off when the screen sleeps.** The LEDs go out once the displays are actually off, whether that came from the idle timer or from locking by hand, and come back on when you wake the screen. It changes nothing in your configuration.
+- **Keyboard.** Arrow keys move the colour (Shift for bigger steps), `+` and `-` change the brightness, `o` turns the LEDs off, `m` switches between one colour and eight, `1` to `8` pick an LED, space toggles the theme sync, Escape closes the panel.
+
+The plugin reads which displays are awake through the shell's own Hyprland connection, on a ten second timer, because Quickshell has no signal for it.
 
 The colour is saved in the widget's entry in `~/.config/omarchy/shell.json` and sent to the LEDs again when the shell starts, since the embedded controller forgets it on a cold boot.
 
@@ -36,8 +40,10 @@ Setting the LEDs goes through the embedded controller, which only root can talk 
 
 It asks for your sudo password once and installs two things:
 
-- `/usr/local/libexec/framework-desktop-rgb-apply`, a root-owned copy of [`libexec/framework-desktop-rgb-apply`](libexec/framework-desktop-rgb-apply). It accepts exactly one argument, a colour as six hex digits, and runs `/usr/bin/framework_tool --rgbkbd 0` with that colour for all eight LEDs. Nothing else.
-- `/etc/sudoers.d/framework-desktop-rgb`, validated with `visudo` before it is installed, which lets your user run that one helper without a password, and only with an argument matching `^[0-9A-Fa-f]{6}$`.
+- `/usr/local/libexec/framework-desktop-rgb-apply`, a root-owned copy of [`libexec/framework-desktop-rgb-apply`](libexec/framework-desktop-rgb-apply). It accepts exactly one argument, one to eight colours as six hex digits each, comma separated, and runs `/usr/bin/framework_tool --rgbkbd 0` with them. Fewer than eight repeat around the ring. Nothing else.
+- `/etc/sudoers.d/framework-desktop-rgb`, validated with `visudo` before it is installed, which lets your user run that one helper without a password, and only with an argument matching `^[0-9A-Fa-f]{6}(,[0-9A-Fa-f]{6}){0,7}$`.
+
+If you installed an earlier version, run the setup once more: the older helper only accepted a single colour. The panel says so when it notices.
 
 This is deliberately narrower than opening `/dev/cros_ec` to your user, which would also hand over fan control, charge limits and firmware flashing.
 
